@@ -122,30 +122,22 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     l2_weight_decay = tf.keras.regularizers.l2(1e-5)
     x_mix = x
     x_mix, y_mix = MixupLayer(prob=0.5)([x, y])
-    #x_mag, x_fft, y = NoMatchLayer(prob=0.5)([x_mag, x_fft, y])
 
     # FFT
     x = tf.keras.layers.Lambda(lambda x: tf.math.abs(tf.signal.fft(tf.complex(x[:, :, 0], tf.zeros_like(x[:, :, 0])))[:, :int(raw_dim / 2)]))(x_mix)
-    #x = tf.keras.layers.Lambda(lambda x: tf.pad(x[:, :, 0], [[0, 0], [1, raw_dim]]))(x_mix)
-    #x = tf.keras.layers.Lambda(lambda x: tf.math.abs(tf.signal.fft(tf.complex(x, tf.zeros_like(x)))))(x)
-    #x = tf.keras.layers.Lambda(lambda x: tf.math.real(tf.signal.ifft(tf.complex(tf.math.square(x), tf.zeros_like(x)))[:,:int(raw_dim/2)]))(x)
     x = tf.keras.layers.Reshape((-1,1))(x)
-    #x = tf.keras.layers.Lambda(lambda x: tf.pad(x[:,:,0], [[0, 0], [1, raw_dim]]))(x_mix)
-    #x = tf.keras.layers.Lambda(lambda x: tf.nn.conv1d(x[:, tf.newaxis, :], x[:, : , tf.newaxis], stride=1, padding='SAME'))(x)
-    #x = tf.keras.layers.Lambda(lambda x: tfp.stats.auto_correlation(x, axis=1, max_lags=2*raw_dim))(x_mix)
-    #x = tf.keras.layers.Reshape((-1, 1))(x)
     x = tf.keras.layers.Conv1D(128, 256, strides=64, activation='linear', padding='same',
                                kernel_regularizer=l2_weight_decay, use_bias=use_bias)(x)
     x = tf.keras.layers.ReLU()(x)
-    x = SqueezeAndExcitationBlock(num_channels=128, dimension=1)(x)
+    #x = SqueezeAndExcitationBlock(num_channels=128, dimension=1)(x)
     x = tf.keras.layers.Conv1D(128, 64, strides=32, activation='linear', padding='same',
                                kernel_regularizer=l2_weight_decay, use_bias=use_bias)(x)
     x = tf.keras.layers.ReLU()(x)
-    x = SqueezeAndExcitationBlock(num_channels=128, dimension=1)(x)
+    #x = SqueezeAndExcitationBlock(num_channels=128, dimension=1)(x)
     x = tf.keras.layers.Conv1D(128, 16, strides=4, activation='linear', padding='same',
                                kernel_regularizer=l2_weight_decay, use_bias=use_bias)(x)
     x = tf.keras.layers.ReLU()(x)
-    x = SqueezeAndExcitationBlock(num_channels=128, dimension=1)(x)
+    #x = SqueezeAndExcitationBlock(num_channels=128, dimension=1)(x)
 
     x = tf.keras.layers.Flatten()(x)
     x = tf.keras.layers.Dense(128, kernel_regularizer=l2_weight_decay, use_bias=use_bias)(x)
@@ -209,7 +201,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     xr = tf.keras.layers.ReLU()(xr)
     xr = tf.keras.layers.Conv2D(16, 3, activation='linear', padding='same', kernel_regularizer=l2_weight_decay,
                                 use_bias=use_bias)(xr)
-    xr = SqueezeAndExcitationBlock(num_channels=16)(xr)
+    #xr = SqueezeAndExcitationBlock(num_channels=16)(xr)
     x = tf.keras.layers.Add()([x, xr])
     x = tf.keras.layers.BatchNormalization()(x)
     xr = tf.keras.layers.ReLU()(x)
@@ -219,7 +211,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     xr = tf.keras.layers.BatchNormalization()(xr)
     xr = tf.keras.layers.Conv2D(16, 3, activation='linear', padding='same', kernel_regularizer=l2_weight_decay,
                                 use_bias=use_bias)(xr)
-    xr = SqueezeAndExcitationBlock(num_channels=16)(xr)
+    #xr = SqueezeAndExcitationBlock(num_channels=16)(xr)
     x = tf.keras.layers.Add()([x, xr])
 
     # third block
@@ -231,7 +223,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     xr = tf.keras.layers.ReLU()(xr)
     xr = tf.keras.layers.Conv2D(32, 3, activation='linear', padding='same', kernel_regularizer=l2_weight_decay,
                                 use_bias=use_bias)(xr)
-    xr = SqueezeAndExcitationBlock(num_channels=32)(xr)
+    #xr = SqueezeAndExcitationBlock(num_channels=32)(xr)
     x = tf.keras.layers.MaxPooling2D((2, 2), padding='same')(x)
     x = tf.keras.layers.Conv2D(kernel_size=1, filters=32, strides=1, padding="same",
                                kernel_regularizer=l2_weight_decay, use_bias=use_bias)(x)
@@ -244,7 +236,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     xr = tf.keras.layers.ReLU()(xr)
     xr = tf.keras.layers.Conv2D(32, 3, activation='linear', padding='same', kernel_regularizer=l2_weight_decay,
                                 use_bias=use_bias)(xr)
-    xr = SqueezeAndExcitationBlock(num_channels=32)(xr)
+    #xr = SqueezeAndExcitationBlock(num_channels=32)(xr)
     x = tf.keras.layers.Add()([x, xr])
 
     # fourth block
@@ -256,7 +248,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     xr = tf.keras.layers.ReLU()(xr)
     xr = tf.keras.layers.Conv2D(64, 3, activation='linear', padding='same', kernel_regularizer=l2_weight_decay,
                                 use_bias=use_bias)(xr)
-    xr = SqueezeAndExcitationBlock(num_channels=64)(xr)
+    #xr = SqueezeAndExcitationBlock(num_channels=64)(xr)
     x = tf.keras.layers.MaxPooling2D((2, 2), padding='same')(x)
     x = tf.keras.layers.Conv2D(kernel_size=1, filters=64, strides=1, padding="same",
                                kernel_regularizer=l2_weight_decay, use_bias=use_bias)(x)
@@ -269,7 +261,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     xr = tf.keras.layers.ReLU()(xr)
     xr = tf.keras.layers.Conv2D(64, 3, activation='linear', padding='same', kernel_regularizer=l2_weight_decay,
                                 use_bias=use_bias)(xr)
-    xr = SqueezeAndExcitationBlock(num_channels=64)(xr)
+    #xr = SqueezeAndExcitationBlock(num_channels=64)(xr)
     x = tf.keras.layers.Add()([x, xr])
 
     # fifth block
@@ -281,7 +273,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     xr = tf.keras.layers.ReLU()(xr)
     xr = tf.keras.layers.Conv2D(128, 3, activation='linear', padding='same', kernel_regularizer=l2_weight_decay,
                                 use_bias=use_bias)(xr)
-    xr = SqueezeAndExcitationBlock(num_channels=128)(xr)
+    #xr = SqueezeAndExcitationBlock(num_channels=128)(xr)
     x = tf.keras.layers.MaxPooling2D((2, 2), padding='same')(x)
     x = tf.keras.layers.Conv2D(kernel_size=1, filters=128, strides=1, padding="same",
                                kernel_regularizer=l2_weight_decay, use_bias=use_bias)(x)
@@ -294,7 +286,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     xr = tf.keras.layers.ReLU()(xr)
     xr = tf.keras.layers.Conv2D(128, 3, activation='linear', padding='same', kernel_regularizer=l2_weight_decay,
                                 use_bias=use_bias)(xr)
-    xr = SqueezeAndExcitationBlock(num_channels=128)(xr)
+    #xr = SqueezeAndExcitationBlock(num_channels=128)(xr)
     x = tf.keras.layers.Add()([x, xr])
 
     x = tf.keras.layers.MaxPooling2D((18, 1), padding='same')(x)
@@ -490,6 +482,26 @@ eval_labels = le.transform(eval_ids)
 #test_labels = le.transform(test_ids)
 num_classes = len(np.unique(train_labels))
 
+values, counts = np.unique(train_labels_4train, return_counts=True)
+sample_weights = np.zeros(train_labels.shape)
+for k in np.arange(sample_weights.shape[0]):
+    sample_weights[k] = 1/counts[train_labels[k]]
+
+counts = np.zeros(train_labels_4train.shape)
+for lab_4train in np.unique(train_labels_4train):
+    counts[train_labels_4train==lab_4train] = 1/np.sum(train_labels_4train==lab_4train)
+
+# normalize weights for each machine type
+sample_weights = np.zeros(train_labels.shape)
+for lab in np.unique(train_labels):
+    print(le.inverse_transform([lab])[0])
+    sample_weights[train_labels==lab] = counts[train_labels==lab]/np.sum(counts[train_labels==lab])
+    print(np.sum(sample_weights[train_labels==lab]))
+input('aaa')
+
+# re-scale
+sample_weights /= np.mean(sample_weights)
+
 # distinguish between normal and anomalous samples on development set
 unknown_raw = eval_raw[~eval_normal]
 unknown_labels = eval_labels[~eval_normal]
@@ -543,12 +555,12 @@ for k_ensemble in np.arange(ensemble_size):
         print('ensemble iteration: ' + str(k_ensemble+1))
         print('aeon: ' + str(k+1))
         # fit model
-        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj.h5'
+        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj_no_squeeze_only_source_sample_weights-normalized-inverted.h5'
         if not os.path.isfile(weight_path):
             model.fit(
-                [train_raw, y_train_cat_4train], [y_train_cat_4train,y_train_cat_4train,y_train_cat_4train], verbose=1,
+                [train_raw[source_train], y_train_cat_4train[source_train]], [y_train_cat_4train[source_train],y_train_cat_4train[source_train],y_train_cat_4train[source_train]], verbose=1,
                 batch_size=batch_size, epochs=epochs,
-                validation_data=([eval_raw, y_eval_cat_4train], [y_eval_cat_4train,y_eval_cat_4train,y_eval_cat_4train]))
+                validation_data=([eval_raw, y_eval_cat_4train], [y_eval_cat_4train,y_eval_cat_4train,y_eval_cat_4train]), sample_weight=sample_weights[source_train])
             model.save(weight_path)
         else:
             model = tf.keras.models.load_model(weight_path,
