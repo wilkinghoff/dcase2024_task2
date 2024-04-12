@@ -481,12 +481,19 @@ train_labels = le.fit_transform(train_ids)
 eval_labels = le.transform(eval_ids)
 #test_labels = le.transform(test_ids)
 num_classes = len(np.unique(train_labels))
+#"""
+sample_weights = np.ones(train_ids_4train.shape)
+for id_4train in np.unique(train_ids_4train[source_train]):
+    section = id_4train.split('###')[0]
+    domain = np.bool(id_4train.split('###')[-1])
+    #if np.sum(train_ids_4train==id_4train)/np.sum((train_ids==section))<1:
+    #    sample_weights[train_ids_4train==id_4train] = 1-np.sum((train_ids_4train==id_4train)*source_train)/np.sum((train_ids==section))
+    #else:
+    #    sample_weights[train_ids_4train==id_4train] = 1/np.sum(((train_ids == section)*source_train))
+    sample_weights[train_ids_4train == id_4train] = np.sum((train_ids_4train == id_4train) * source_train)
+#"""
 
-values, counts = np.unique(train_labels_4train, return_counts=True)
-sample_weights = np.zeros(train_labels.shape)
-for k in np.arange(sample_weights.shape[0]):
-    sample_weights[k] = 1/counts[train_labels[k]]
-
+"""
 counts = np.zeros(train_labels_4train.shape)
 for lab_4train in np.unique(train_labels_4train):
     counts[train_labels_4train==lab_4train] = 1/np.sum(train_labels_4train==lab_4train)
@@ -495,12 +502,31 @@ for lab_4train in np.unique(train_labels_4train):
 sample_weights = np.zeros(train_labels.shape)
 for lab in np.unique(train_labels):
     print(le.inverse_transform([lab])[0])
-    sample_weights[train_labels==lab] = counts[train_labels==lab]/np.sum(counts[train_labels==lab])
+    sample_weights[(train_labels==lab)*source_train] = counts[(train_labels==lab)*source_train]/np.sum(counts[(train_labels==lab)*source_train])
+    sample_weights[(train_labels==lab)*~source_train] = counts[(train_labels==lab)*~source_train]/np.sum(counts[(train_labels==lab)*~source_train])
     print(np.sum(sample_weights[train_labels==lab]))
-input('aaa')
+#"""
+
+# normalize weights for each machine type
+for lab in np.unique(train_labels):
+    sample_weights[(train_labels==lab)*source_train] = sample_weights[(train_labels==lab)*source_train]/np.sum(sample_weights[(train_labels==lab)*source_train])
+    #sample_weights[(train_labels==lab)*~source_train] = sample_weights[(train_labels==lab)*~source_train]/np.sum(sample_weights[(train_labels==lab)*~source_train])
+    #sample_weights[train_labels==lab] = sample_weights[train_labels==lab]/np.sum(sample_weights[train_labels==lab])
+
+for lab in np.unique(train_labels):
+    print(le.inverse_transform([lab])[0])
+    print(np.sum(sample_weights[(train_labels==lab)*source_train]))
+    print(np.sum(sample_weights[(train_labels==lab)*~source_train]))
+    print(np.sum(sample_weights[train_labels==lab]))
 
 # re-scale
-sample_weights /= np.mean(sample_weights)
+sample_weights /= np.mean(sample_weights[source_train])
+
+for lab in np.unique(train_labels):
+    print(le.inverse_transform([lab])[0])
+    print(np.sum(sample_weights[(train_labels==lab)*source_train]))
+    print(np.sum(sample_weights[(train_labels==lab)*~source_train]))
+    print(np.sum(sample_weights[train_labels==lab]))
 
 # distinguish between normal and anomalous samples on development set
 unknown_raw = eval_raw[~eval_normal]
@@ -530,10 +556,10 @@ ensemble_size = 10
 final_results_dev = np.zeros((ensemble_size, 6))
 final_results_eval = np.zeros((ensemble_size, 6))
 
-pred_eval = np.zeros((eval_raw.shape[0], np.unique(train_labels).shape[0]))
-pred_unknown = np.zeros((unknown_raw.shape[0], np.unique(train_labels).shape[0]))
-#pred_test = np.zeros((test_raw.shape[0], np.unique(train_labels).shape[0]))
-pred_train = np.zeros((train_labels.shape[0], np.unique(train_labels).shape[0]))
+pred_eval = np.zeros((eval_raw.shape[0], np.unique(train_labels).shape[0], 2))
+pred_unknown = np.zeros((unknown_raw.shape[0], np.unique(train_labels).shape[0], 2))
+#pred_test = np.zeros((test_raw.shape[0], np.unique(train_labels).shape[0], 2))
+pred_train = np.zeros((train_labels.shape[0], np.unique(train_labels).shape[0], 2))
 
 for k_ensemble in np.arange(ensemble_size):
     # prepare scores and domain info
@@ -555,12 +581,17 @@ for k_ensemble in np.arange(ensemble_size):
         print('ensemble iteration: ' + str(k_ensemble+1))
         print('aeon: ' + str(k+1))
         # fit model
-        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj_no_squeeze_only_source_sample_weights-normalized-inverted.h5'
+        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj_no_squeeze_sample_weights-normalized.h5'
         if not os.path.isfile(weight_path):
             model.fit(
-                [train_raw[source_train], y_train_cat_4train[source_train]], [y_train_cat_4train[source_train],y_train_cat_4train[source_train],y_train_cat_4train[source_train]], verbose=1,
+                [train_raw[source_train], y_train_cat_4train[source_train]],
+                [y_train_cat_4train[source_train], y_train_cat_4train[source_train], y_train_cat_4train[source_train]],
+                verbose=1,
                 batch_size=batch_size, epochs=epochs,
-                validation_data=([eval_raw, y_eval_cat_4train], [y_eval_cat_4train,y_eval_cat_4train,y_eval_cat_4train]), sample_weight=sample_weights[source_train])
+                validation_data=(
+                [eval_raw, y_eval_cat_4train], [y_eval_cat_4train, y_eval_cat_4train, y_eval_cat_4train]),
+                sample_weight=sample_weights[source_train])
+            model.save(weight_path)
             model.save(weight_path)
         else:
             model = tf.keras.models.load_model(weight_path,
@@ -588,21 +619,19 @@ for k_ensemble in np.arange(ensemble_size):
             means_target_ln = x_train_ln[~source_train * (train_labels == lab)]
 
             # compute cosine distances
-            eval_cos = np.min(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose()),axis=-1, keepdims=True)
-            eval_cos = np.minimum(eval_cos,np.min(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose()), axis=-1, keepdims=True))
-            unknown_cos = np.min(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose()), axis=-1, keepdims=True)
-            unknown_cos = np.minimum(unknown_cos,np.min(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose()), axis=-1, keepdims=True))
-            #test_cos = np.min(1-np.dot(x_test_ln[test_labels==lab], means_target_ln.transpose()), axis=-1, keepdims=True)
-            #test_cos = np.minimum(test_cos, np.min(1-np.dot(x_test_ln[test_labels==lab], means_source_ln.transpose()), axis=-1, keepdims=True))
-            train_cos = np.min(1-np.dot(x_train_ln[train_labels==lab], means_target_ln.transpose()), axis=-1, keepdims=True)
-            train_cos = np.minimum(train_cos, np.min(1-np.dot(x_train_ln[train_labels==lab], means_source_ln.transpose()), axis=-1, keepdims=True))
+            #test_cos[:,:,0] = np.min(1-np.dot(x_test_ln[test_labels==lab], means_target_ln.transpose()), axis=-1)
+            #test_cos[:,:,1] = np.min(1-np.dot(x_test_ln[test_labels==lab], means_source_ln.transpose()), axis=-1)
+            #train_cos[:,:,0] = np.min(1-np.dot(x_train_ln[train_labels==lab], means_target_ln.transpose()), axis=-1)
+            #train_cos[:,:,1] = np.min(1-np.dot(x_train_ln[train_labels==lab], means_source_ln.transpose()), axis=-1)
 
             if np.sum(eval_labels == lab) > 0:
-                pred_eval[eval_labels == lab, j] += np.min(eval_cos, axis=-1)
-                pred_unknown[unknown_labels == lab, j] += np.min(unknown_cos, axis=-1)
+                pred_eval[eval_labels == lab, j,0] += np.min(np.sqrt(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose()))),axis=-1)
+                pred_eval[eval_labels == lab, j,1] += np.min(np.sqrt(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose()))), axis=-1)
+                pred_unknown[unknown_labels == lab, j,0] += np.min(np.sqrt(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose()))), axis=-1)
+                pred_unknown[unknown_labels == lab, j,1] += np.min(np.sqrt(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose()))), axis=-1)
             #if np.sum(test_labels == lab) > 0:
             #    pred_test[test_labels == lab, j] += np.min(test_cos, axis=-1)
-            pred_train[train_labels == lab, j] += np.min(train_cos, axis=-1)
+            #pred_train[train_labels == lab, j] += np.min(train_cos, axis=-1)
         print('#######################################################################################################')
         print('DEVELOPMENT SET')
         print('#######################################################################################################')
@@ -613,8 +642,8 @@ for k_ensemble in np.arange(ensemble_size):
         aucs_target = []
         p_aucs_target = []
         for j, cat in enumerate(np.unique(eval_ids)):
-            y_pred = np.concatenate([pred_eval[eval_labels == le.transform([cat]), le.transform([cat])],
-                                     pred_unknown[unknown_labels == le.transform([cat]), le.transform([cat])]],
+            y_pred = np.concatenate([np.min(pred_eval[eval_labels == le.transform([cat]), le.transform([cat])], axis=-1),
+                                     np.min(pred_unknown[unknown_labels == le.transform([cat]), le.transform([cat])], axis=-1)],
                                      axis=0)
             y_true = np.concatenate([np.zeros(np.sum(eval_labels == le.transform([cat]))),
                                      np.ones(np.sum(unknown_labels == le.transform([cat])))], axis=0)
