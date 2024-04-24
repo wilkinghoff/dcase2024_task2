@@ -490,7 +490,7 @@ for id_4train in np.unique(train_ids_4train[source_train]):
     #    sample_weights[train_ids_4train==id_4train] = 1-np.sum((train_ids_4train==id_4train)*source_train)/np.sum((train_ids==section))
     #else:
     #    sample_weights[train_ids_4train==id_4train] = 1/np.sum(((train_ids == section)*source_train))
-    sample_weights[train_ids_4train == id_4train] = np.sum((train_ids_4train == id_4train) * source_train)
+    sample_weights[train_ids_4train == id_4train] = np.sum((train_ids_4train != id_4train) * source_train)
 #"""
 
 """
@@ -581,7 +581,7 @@ for k_ensemble in np.arange(ensemble_size):
         print('ensemble iteration: ' + str(k_ensemble+1))
         print('aeon: ' + str(k+1))
         # fit model
-        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj_no_squeeze_sample_weights-normalized.h5'
+        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj_no_squeeze_sample_weights-normalized-inverse.h5'
         if not os.path.isfile(weight_path):
             model.fit(
                 [train_raw[source_train], y_train_cat_4train[source_train]],
