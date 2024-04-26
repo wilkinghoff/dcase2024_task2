@@ -21,7 +21,7 @@ from sklearn.mixture import GaussianMixture
 from scipy.spatial.distance import cdist
 import tensorflow_probability as tfp
 from sklearn.utils import class_weight
-from statex_aug_layer_classwise import StatExLayer
+#from statex_aug_layer_classwise import StatExLayer
 
 
 class SqueezeAndExcitationBlock(tf.keras.layers.Layer):
@@ -160,29 +160,6 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     x = tf.keras.layers.Reshape((raw_dim,))(x_mix)
     x = MagnitudeSpectrogram(16000, 1024, 512, f_max=8000, f_min=200)(x)
 
-    x, y, y_mix = StatExLayer(prob=0.5)([x,y_mix])
-
-    #x = tf.keras.layers.Reshape((561, 513))(x)
-    #x = tf.keras.layers.Permute((2,1))(x)
-    #x_spec = x
-    # try permuting them layers
-    #query = tf.keras.layers.Dense(128, use_bias=use_bias)(x)
-    #value = tf.keras.layers.Dense(128, use_bias=use_bias)(x)
-    #key = tf.keras.layers.Dense(128, use_bias=use_bias)(x)
-    #query = tf.keras.layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=-1))(query)
-    #key = tf.keras.layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=-1))(key)
-    #x = tf.keras.layers.Multiply()([query,key])
-    #x = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x, axis=-1, keepdims=True))(x)
-    #x = tf.keras.layers.BatchNormalization()(x)
-    #x = tf.keras.layers.Lambda(lambda x: tf.nn.softmax(x, axis=1))(x)
-    #x = tf.keras.layers.Multiply()([x,x_spec])
-
-    #x = tf.keras.layers.Permute((2,1))(x)
-    #x = tf.keras.layers.Reshape((561, 513, 1))(x)
-
-    #x_mean = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(x[:,:,:,0], axis=1))(x)
-    #x_max = tf.keras.layers.Lambda(lambda x: tf.math.reduce_max(x[:,:,:,0], axis=1))(x)
-
     x = tf.keras.layers.Lambda(lambda x: x-tf.math.reduce_mean(x, axis=1, keepdims=True))(x) # CMN-like normalization
     x = tf.keras.layers.BatchNormalization(axis=-2)(x)
 
@@ -292,46 +269,20 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     x = tf.keras.layers.MaxPooling2D((18, 1), padding='same')(x)
     x = tf.keras.layers.Flatten(name='flat')(x)
     x = tf.keras.layers.BatchNormalization()(x)
-    # x = tf.keras.layers.Dropout(0.5)(x)
     emb_mel = tf.keras.layers.Dense(256, kernel_regularizer=l2_weight_decay, name='emb_mel', use_bias=use_bias)(x)
 
-    #mean_mel = tf.keras.layers.Dense(128, kernel_regularizer=l2_weight_decay, name='max_mel', use_bias=use_bias)(x_max)
-    #max_mel = tf.keras.layers.Dense(128, kernel_regularizer=l2_weight_decay, name='mean_mel', use_bias=use_bias)(x_mean)
-    #emb_mel_ssl, emb_fft_ssl, y_ssl = AugLayer(prob=0.5)([emb_mel, emb_fft])
     emb_mel_ssl, emb_fft_ssl, y_ssl = AugLayer(prob=0.5)([emb_mel,emb_fft,y])
     # prepare output
     x = tf.keras.layers.Concatenate(axis=-1)([emb_fft, emb_mel])
     x_ssl = tf.keras.layers.Concatenate(axis=-1)([emb_fft_ssl, emb_mel_ssl])
-    #x = tf.keras.layers.Add()([emb_fft, emb_mel])
-    #x_ssl = tf.keras.layers.Add()([emb_fft_ssl, emb_mel_ssl])
-    #x = tf.keras.layers.BatchNormalization()(x)
-    #query = tf.keras.layers.Dense(128, use_bias=use_bias)(x)
-    #value = tf.keras.layers.Dense(128, use_bias=use_bias)(x)
-    #key = tf.keras.layers.Dense(128, use_bias=use_bias)(x)
-    #query = tf.keras.layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=-1))(query)
-    #key = tf.keras.layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=-1))(key)
-    #x = tf.keras.layers.Multiply()([query,key])
-    #x = tf.keras.layers.Lambda(lambda x: tf.nn.softmax(x))(x)
-    #x = tf.keras.layers.Multiply()([x,value])
-    #x = tf.keras.layers.Attention()([query, value])
-    # w = tf.keras.layers.Dense(256, activation='softmax')(x)
-    # w_ssl = tf.keras.layers.Dense(256, activation='softmax')(x_ssl)
-    # x = tf.keras.layers.Lambda(lambda x: x[0]*x[1])([x, w])
-    # x_ssl = tf.keras.layers.Lambda(lambda x: x[0]*x[1])([x_ssl, w_ssl])
 
-    output_ssl2 = AdaProj(n_classes=num_classes*9, n_subclusters=n_subclusters, trainable=True)([x_ssl, y_ssl, label_input])
+    output_ssl = AdaProj(n_classes=num_classes*3, n_subclusters=n_subclusters, trainable=False)([x_ssl, y_ssl, label_input])
     output = AdaProj(n_classes=num_classes, n_subclusters=n_subclusters, trainable=False)([x, y_mix, label_input])
-    #output_ssl2 = SCAdaCos(n_classes=num_classes*2, n_subclusters=n_subclusters, trainable=True)([x_ssl, y_ssl2, label_input])
-    output_ssl = AdaProj(n_classes=num_classes*3, n_subclusters=n_subclusters, trainable=True)([x, y, label_input])
 
     loss_output = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=-1))([output, y_mix])
-    loss_output_ssl = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=-1))([output_ssl, y])
-    loss_output_ssl2 = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=-1))([output_ssl2, y_ssl])
+    loss_output_ssl = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=-1))([output_ssl, y_ssl])
 
-    #loss_output_ssl = tf.keras.layers.Lambda(lambda x: tf.transpose(tf.math.reduce_sum(tf.reshape(tf.transpose(x, [0,2,1]), [-1, 2, num_classes*3, 3]), axis=3), [0, 2, 1]))(loss_output_ssl2)
-    #loss_output_ssl2 = tf.keras.layers.Lambda(lambda x: tf.transpose(tf.math.reduce_sum(tf.reshape(tf.transpose(x, [0,2,1]), [-1, 2, 3, num_classes*3]), axis=2), [0, 2, 1]))(loss_output_ssl2)
-
-    return data_input, label_input, loss_output, loss_output_ssl, loss_output_ssl2
+    return data_input, label_input, loss_output, loss_output_ssl
 
 
 ########################################################################################################################
@@ -572,24 +523,24 @@ for k_ensemble in np.arange(ensemble_size):
     y_unknown_cat_4train = keras.utils.np_utils.to_categorical(unknown_labels_4train, num_classes=num_classes_4train)
 
     # compile model
-    data_input, label_input, loss_output, loss_output_ssl, loss_output_ssl2 = model_emb_cnn(num_classes=num_classes_4train,
+    data_input, label_input, loss_output, loss_output_ssl = model_emb_cnn(num_classes=num_classes_4train,
                                                              raw_dim=eval_raw.shape[1], n_subclusters=n_subclusters, use_bias=False)
-    model = tf.keras.Model(inputs=[data_input, label_input], outputs=[loss_output, loss_output_ssl, loss_output_ssl2])
-    model.compile(loss=[mixupLoss, mixupLoss, mixupLoss], optimizer=tf.keras.optimizers.Adam() ,loss_weights=[1,0,1])
+    model = tf.keras.Model(inputs=[data_input, label_input], outputs=[loss_output, loss_output_ssl])
+    model.compile(loss=[mixupLoss, mixupLoss], optimizer=tf.keras.optimizers.Adam() ,loss_weights=[1,1])
     print(model.summary())
     for k in np.arange(aeons):
         print('ensemble iteration: ' + str(k_ensemble+1))
         print('aeon: ' + str(k+1))
         # fit model
-        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj_no_squeeze_sample_weights-normalized-inverse.h5'
+        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj_no_squeeze_sample_weights-normalized-inverse_no_statex.h5'
         if not os.path.isfile(weight_path):
             model.fit(
                 [train_raw[source_train], y_train_cat_4train[source_train]],
-                [y_train_cat_4train[source_train], y_train_cat_4train[source_train], y_train_cat_4train[source_train]],
+                [y_train_cat_4train[source_train], y_train_cat_4train[source_train]],
                 verbose=1,
                 batch_size=batch_size, epochs=epochs,
                 validation_data=(
-                [eval_raw, y_eval_cat_4train], [y_eval_cat_4train, y_eval_cat_4train, y_eval_cat_4train]),
+                [eval_raw, y_eval_cat_4train], [y_eval_cat_4train, y_eval_cat_4train]),
                 sample_weight=sample_weights[source_train])
             model.save(weight_path)
             model.save(weight_path)
