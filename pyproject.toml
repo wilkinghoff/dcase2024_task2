@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "DCASE2024_TASK2"
+version = "0.1.0"
+description = "DCASE 2024 Challenge , yacine and kevin"
+authors = ["Yacine Bel-Hadj <yacine.bel-hadj@vub.be>", "Kevin Wilkinghoff < >"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+tensorflow = "^2.16.1"
+numpy = "^1.21.2"
+pandas = "^2.2.2"
+soundfile = "^0.12.1"
+librosa = "^0.10.1"
+tqdm = "^4.66.2"
+tensorflow-probability = "^0.24.0"
+tf-keras = "^2.16.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
