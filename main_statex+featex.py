@@ -548,7 +548,7 @@ for k_ensemble in np.arange(ensemble_size):
             model = tf.keras.models.load_model(weight_path,
                                                custom_objects={'MixupLayer': MixupLayer, 'mixupLoss': mixupLoss,
                                                                'SCAdaCos': SCAdaCos, 'AdaProj': AdaProj,
-                                                               'MagnitudeSpectrogram': MagnitudeSpectrogram, 'AugLayer': AugLayer, 'StatExLayer': StatExLayer, 'SqueezeAndExcitationBlock': SqueezeAndExcitationBlock})
+                                                               'MagnitudeSpectrogram': MagnitudeSpectrogram, 'AugLayer': AugLayer, 'SqueezeAndExcitationBlock': SqueezeAndExcitationBlock})
 
         # extract embeddings
         emb_model = tf.keras.Model(model.input, model.layers[-6].output)
