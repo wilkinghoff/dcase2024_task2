@@ -42,6 +42,8 @@ class DataReaderSingleMachine():
         # get the unique values for each parameter column
         unique_param = self.attribute[param_col].apply(lambda x: x.unique())
         unique_values = self.attribute[values_col].apply(lambda x: x.unique())
+        # compute the number of unique values for each parameter
+        
         return unique_param, unique_values
 
     def process_files(self, stage: str):
@@ -58,6 +60,8 @@ class DataReaderSingleMachine():
             attribute = [v for k, v in attribute.items() if 'v' in k]
             data_path_and_attributes.append((path, attribute))
         return data_path_and_attributes
+    
+
 
     def __repr__(self):
         return f"""Machine: {self.machine_name}, attribute parameterfile: \n {pd.DataFrame(self.get_possible_parameter('train')[0])} 
