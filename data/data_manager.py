@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
 from enum import Enum
+import re
 
 class DataReaderSingleMachine():
     def __init__(self, machine_name: str, directory_path: str | Path, csv_file_name: str= "attributes_00.csv"):
@@ -10,64 +11,51 @@ class DataReaderSingleMachine():
         self.csv_file_name = csv_file_name
         self.attribute = self.read_attribute()
 
+
+
     def read_attribute(self) -> pd.DataFrame:
         csv_file_path = self.directory_path / self.csv_file_name
         if not csv_file_path.exists():
-            self.attribute = None
             return None
-        return pd.read_csv(csv_file_path)
-        
+        return pd.read_csv(csv_file_path)        
 
-    def get_files_path(self,stage: str):
+    def get_files_path(self, stage: str):
         if stage not in ["train", "test"]:
-            raise ValueError("Stage must be either train or test")
-        return self.directory_path / stage
+            raise ValueError("Stage must be either 'train' or 'test'")
+        return list((self.directory_path / stage).glob('*.wav'))       
 
-    def get_files_path_attribute(self, stage: str):
-        if self.attribute is None:
-            print("No attribute file found for this machine")
-            return self.get_files_path(stage)
+    def extract_attributes_unique_values(self, stage: str='train'):
         paths = self.get_files_path(stage)
-        file_attributes = self.attribute[self.attribute['file_name'].str.contains(f"/{stage}/")]
-        # file_attribute are relatibe file paths, we need to join them with the full path that is in the list of paths 
-        file_attributes.loc[:,'file_name']= file_attributes['file_name'].apply(lambda x: self.data_path / x)
-        return file_attributes
+        attributes = []
+        for path in paths:
+            attributes.append(path_to_dict(path))
+        attributes = pd.DataFrame(attributes)
+        # remove normal and source columns
+        attributes = attributes.drop(columns=["normal", "source"], errors="ignore")
+        # get the unique values of each column and return a dict 
+        return {col: attributes[col].unique() for col in attributes.columns}
     
-    def get_possible_parameter(self, stage: str):
-        if self.attribute is None:
-            print("No attribute file found for this machine")
-            return None
-        values_col = [col for col in self.attribute.columns if 'v' in col]
-        param_col = [col for col in self.attribute.columns if 'p' in col]
-        # get the unique values for each parameter column
-        unique_param = self.attribute[param_col].apply(lambda x: x.unique())
-        unique_values = self.attribute[values_col].apply(lambda x: x.unique())
-        # compute the number of unique values for each parameter
-        
-        return unique_param, unique_values
-
-    def process_files(self, stage: str):
-        if self.attribute is None:
-            print("No attribute file found for this machine")
-            return None
-        df  = self.get_files_path_attribute(stage)
-        data_path_and_attributes = []
-        for index, row in df.iterrows():
-            path = row['file_name']
-            if not Path(path).exists():
-                break
-            attribute = row.drop('file_name').to_dict()
-            attribute = [v for k, v in attribute.items() if 'v' in k]
-            data_path_and_attributes.append((path, attribute))
-        return data_path_and_attributes
-    
-
-
     def __repr__(self):
-        return f"""Machine: {self.machine_name}, attribute parameterfile: \n {pd.DataFrame(self.get_possible_parameter('train')[0])} 
-        \n {pd.DataFrame(self.get_possible_parameter('train')[1])}"""
-    
+        train_attributes = self.possible_attributes("train")
+        return f"Machine: {self.machine_name}, Possible Attributes: {train_attributes}"
 
+def fix_attribute_name(attribute_name: str):
+    if attribute_name == "target":
+        return "source"
+    return attribute_name
+
+def path_to_dict(path: Path): 
+    # get the name of the file without the extension
+    name = path.stem
+    # split the name by '_'
+    parts = name.split('_')
+    attributes = {}
+    for i in range(0, len(parts), 2):
+        # if the part is an attribute
+        if parts[i].isalpha():
+            attributes[fix_attribute_name(parts[i])] = parts[i+1]
+    # return the dictionary 
+    return attributes
 
 class BaseMachineType(Enum):
     def __init__(self, name, path):
