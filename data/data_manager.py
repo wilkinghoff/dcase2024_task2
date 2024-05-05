@@ -53,7 +53,10 @@ def path_to_dict(path: Path):
     for i in range(0, len(parts), 2):
         # if the part is an attribute
         if parts[i].isalpha():
-            attributes[fix_attribute_name(parts[i])] = parts[i+1]
+            try:
+                attributes[fix_attribute_name(parts[i])] = parts[i+1]
+            except:
+                pass
     # return the dictionary 
     return attributes
 
