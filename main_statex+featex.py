@@ -514,13 +514,13 @@ pred_train = np.zeros((train_labels.shape[0], np.unique(train_labels).shape[0], 
 
 for k_ensemble in np.arange(ensemble_size):
     # prepare scores and domain info
-    y_train_cat = keras.utils.np_utils.to_categorical(train_labels, num_classes=num_classes)
-    y_eval_cat = keras.utils.np_utils.to_categorical(eval_labels, num_classes=num_classes)
-    y_unknown_cat = keras.utils.np_utils.to_categorical(unknown_labels, num_classes=num_classes)
+    y_train_cat = tf.keras.utils.to_categorical(train_labels, num_classes=num_classes)
+    y_eval_cat = tf.keras.utils.to_categorical(eval_labels, num_classes=num_classes)
+    y_unknown_cat = tf.keras.utils.to_categorical(unknown_labels, num_classes=num_classes)
 
-    y_train_cat_4train = keras.utils.np_utils.to_categorical(train_labels_4train, num_classes=num_classes_4train)
-    y_eval_cat_4train = keras.utils.np_utils.to_categorical(eval_labels_4train, num_classes=num_classes_4train)
-    y_unknown_cat_4train = keras.utils.np_utils.to_categorical(unknown_labels_4train, num_classes=num_classes_4train)
+    y_train_cat_4train = tf.keras.utils.to_categorical(train_labels_4train, num_classes=num_classes_4train)
+    y_eval_cat_4train = tf.keras.utils.to_categorical(eval_labels_4train, num_classes=num_classes_4train)
+    y_unknown_cat_4train = tf.keras.utils.to_categorical(unknown_labels_4train, num_classes=num_classes_4train)
 
     # compile model
     data_input, label_input, loss_output, loss_output_ssl = model_emb_cnn(num_classes=num_classes_4train,
