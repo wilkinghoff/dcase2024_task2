@@ -116,7 +116,7 @@ def length_norm(mat):
 
 def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     data_input = tf.keras.layers.Input(shape=(raw_dim, 1), dtype='float32')
-    label_input = tf.keras.layers.Input(shape=(num_classes), dtype='float32')
+    label_input = tf.keras.layers.Input(shape=(num_classes,), dtype='float32')
     y = label_input
     x = data_input
     l2_weight_decay = tf.keras.regularizers.l2(1e-5)
@@ -432,52 +432,20 @@ train_labels = le.fit_transform(train_ids)
 eval_labels = le.transform(eval_ids)
 #test_labels = le.transform(test_ids)
 num_classes = len(np.unique(train_labels))
-#"""
+
+# define sample weights
 sample_weights = np.ones(train_ids_4train.shape)
 for id_4train in np.unique(train_ids_4train[source_train]):
     section = id_4train.split('###')[0]
     domain = np.bool(id_4train.split('###')[-1])
-    #if np.sum(train_ids_4train==id_4train)/np.sum((train_ids==section))<1:
-    #    sample_weights[train_ids_4train==id_4train] = 1-np.sum((train_ids_4train==id_4train)*source_train)/np.sum((train_ids==section))
-    #else:
-    #    sample_weights[train_ids_4train==id_4train] = 1/np.sum(((train_ids == section)*source_train))
     sample_weights[train_ids_4train == id_4train] = np.sum((train_ids_4train != id_4train) * source_train)
-#"""
-
-"""
-counts = np.zeros(train_labels_4train.shape)
-for lab_4train in np.unique(train_labels_4train):
-    counts[train_labels_4train==lab_4train] = 1/np.sum(train_labels_4train==lab_4train)
-
-# normalize weights for each machine type
-sample_weights = np.zeros(train_labels.shape)
-for lab in np.unique(train_labels):
-    print(le.inverse_transform([lab])[0])
-    sample_weights[(train_labels==lab)*source_train] = counts[(train_labels==lab)*source_train]/np.sum(counts[(train_labels==lab)*source_train])
-    sample_weights[(train_labels==lab)*~source_train] = counts[(train_labels==lab)*~source_train]/np.sum(counts[(train_labels==lab)*~source_train])
-    print(np.sum(sample_weights[train_labels==lab]))
-#"""
 
 # normalize weights for each machine type
 for lab in np.unique(train_labels):
     sample_weights[(train_labels==lab)*source_train] = sample_weights[(train_labels==lab)*source_train]/np.sum(sample_weights[(train_labels==lab)*source_train])
-    #sample_weights[(train_labels==lab)*~source_train] = sample_weights[(train_labels==lab)*~source_train]/np.sum(sample_weights[(train_labels==lab)*~source_train])
-    #sample_weights[train_labels==lab] = sample_weights[train_labels==lab]/np.sum(sample_weights[train_labels==lab])
 
-for lab in np.unique(train_labels):
-    print(le.inverse_transform([lab])[0])
-    print(np.sum(sample_weights[(train_labels==lab)*source_train]))
-    print(np.sum(sample_weights[(train_labels==lab)*~source_train]))
-    print(np.sum(sample_weights[train_labels==lab]))
-
-# re-scale
+# re-scale weights
 sample_weights /= np.mean(sample_weights[source_train])
-
-for lab in np.unique(train_labels):
-    print(le.inverse_transform([lab])[0])
-    print(np.sum(sample_weights[(train_labels==lab)*source_train]))
-    print(np.sum(sample_weights[(train_labels==lab)*~source_train]))
-    print(np.sum(sample_weights[train_labels==lab]))
 
 # distinguish between normal and anomalous samples on development set
 unknown_raw = eval_raw[~eval_normal]
