@@ -8,11 +8,8 @@ import librosa
 from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
 from sklearn.preprocessing import LabelEncoder
-#from nomatch_layer import NoMatchLayer
-#from mixup_layer_simu import MixupLayer
 from mixup_layer import MixupLayer
 from openl3_idea_aug_layer_classwise import AugLayer
-#from openl3_idea_aug_layer import AugLayer
 from subcluster_adacos import SCAdaCos, AdaProj
 from scipy.stats import hmean
 from tensorflow.keras import backend as K
@@ -21,7 +18,6 @@ from sklearn.mixture import GaussianMixture
 from scipy.spatial.distance import cdist
 import tensorflow_probability as tfp
 from sklearn.utils import class_weight
-#from statex_aug_layer_classwise import StatExLayer
 
 
 class SqueezeAndExcitationBlock(tf.keras.layers.Layer):
@@ -290,6 +286,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
 ########################################################################################################################
 target_sr = 16000
 max_size = 192000  #288000 or 192000
+use_ensemble = True
 
 # load train data
 print('Loading train data')
@@ -538,19 +535,25 @@ for k_ensemble in np.arange(ensemble_size):
             means_target_ln = x_train_ln[~source_train * (train_labels == lab)]
 
             # compute cosine distances
-            #test_cos[:,:,0] = np.min(1-np.dot(x_test_ln[test_labels==lab], means_target_ln.transpose()), axis=-1)
-            #test_cos[:,:,1] = np.min(1-np.dot(x_test_ln[test_labels==lab], means_source_ln.transpose()), axis=-1)
-            #train_cos[:,:,0] = np.min(1-np.dot(x_train_ln[train_labels==lab], means_target_ln.transpose()), axis=-1)
-            #train_cos[:,:,1] = np.min(1-np.dot(x_train_ln[train_labels==lab], means_source_ln.transpose()), axis=-1)
-
             if np.sum(eval_labels == lab) > 0:
-                pred_eval[eval_labels == lab, j,0] += np.min(np.sqrt(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose()))),axis=-1)
-                pred_eval[eval_labels == lab, j,1] += np.min(np.sqrt(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose()))), axis=-1)
-                pred_unknown[unknown_labels == lab, j,0] += np.min(np.sqrt(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose()))), axis=-1)
-                pred_unknown[unknown_labels == lab, j,1] += np.min(np.sqrt(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose()))), axis=-1)
+                if use_ensemble:
+                    pred_eval[eval_labels == lab, j,0] += np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose())),axis=-1)
+                    pred_eval[eval_labels == lab, j,1] += np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose())), axis=-1)
+                    pred_unknown[unknown_labels == lab, j,0] += np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose())), axis=-1)
+                    pred_unknown[unknown_labels == lab, j,1] += np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose())), axis=-1)
+                else:
+                    pred_eval[eval_labels == lab, j,0] = np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose())),axis=-1)
+                    pred_eval[eval_labels == lab, j,1] = np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose())), axis=-1)
+                    pred_unknown[unknown_labels == lab, j,0] = np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose())), axis=-1)
+                    pred_unknown[unknown_labels == lab, j,1] = np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose())), axis=-1)
             #if np.sum(test_labels == lab) > 0:
-            #    pred_test[test_labels == lab, j] += np.min(test_cos, axis=-1)
-            #pred_train[train_labels == lab, j] += np.min(train_cos, axis=-1)
+            #    if use_ensemble:
+            #        pred_test[test_labels == lab, j, 0] += np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_target_ln.transpose())), axis=-1)
+            #        pred_test[test_labels == lab, j, 1] += np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_source_ln.transpose())), axis=-1)
+            #    else:
+            #        pred_test[test_labels == lab, j, 0] = np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_target_ln.transpose())), axis=-1)
+            #        pred_test[test_labels == lab, j, 1] = np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_source_ln.transpose())), axis=-1)
+
         print('#######################################################################################################')
         print('DEVELOPMENT SET')
         print('#######################################################################################################')
@@ -626,7 +629,7 @@ for k_ensemble in np.arange(ensemble_size):
         aucs_target = []
         p_aucs_target = []
         for j, cat in enumerate(np.unique(test_ids)):
-            y_pred = pred_test[test_labels == le.transform([cat]), le.transform([cat])]
+            y_pred = np.min(pred_test[test_labels == le.transform([cat]), le.transform([cat])], axis=-1)
             y_true = np.array(pd.read_csv(
                 './dcase2023_task2_evaluator-main/ground_truth_data/ground_truth_' + cat.split('_')[0] + '_section_' + cat.split('_')[1] + '_test.csv', header=None).iloc[:, 1] == 1)
             auc = roc_auc_score(y_true, y_pred)
@@ -705,12 +708,18 @@ for j, cat in enumerate(np.unique(test_ids)):
 print('####################')
 print('####################')
 print('####################')
-print('final results for development set')
-print(np.round(np.mean(final_results_dev*100, axis=0), 1))
-print(np.round(np.std(final_results_dev*100, axis=0), 1))
-#print('final results for evaluation set')
-#print(np.round(np.mean(final_results_eval*100, axis=0), 1))
-#print(np.round(np.std(final_results_eval*100, axis=0), 1))
+if use_ensemble:
+    print('final results for development set')
+    print(np.round(final_results_dev[-1]*100, 1))
+    #print('final results for evaluation set')
+    #print(np.round(final_results_eval[-1]*100, 1))
+else:
+    print('final results for development set')
+    print(np.round(np.mean(final_results_dev*100, axis=0), 1))
+    print(np.round(np.std(final_results_dev*100, axis=0), 1))
+    #print('final results for evaluation set')
+    #print(np.round(np.mean(final_results_eval*100, axis=0), 1))
+    #print(np.round(np.std(final_results_eval*100, axis=0), 1))
 
 print('####################')
 print('>>>> finished! <<<<<')
