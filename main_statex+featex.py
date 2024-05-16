@@ -55,9 +55,10 @@ class SqueezeAndExcitationBlock(tf.keras.layers.Layer):
 
 
 def adjust_size(wav, new_size):
-    reps = int(np.ceil(new_size/wav.shape[0]))
-    offset = np.random.randint(low=0, high=int(reps*wav.shape[0]-new_size+1))
-    return np.tile(wav, reps=reps)[offset:offset+new_size]
+    #reps = int(np.ceil(new_size/wav.shape[0]))
+    #offset = np.random.randint(low=0, high=int(reps*wav.shape[0]-new_size+1))
+    #return np.tile(wav, reps=reps)[offset:offset+new_size]
+    return librosa.util.pad_center(wav, new_size)
 
 
 class MagnitudeSpectrogram(tf.keras.layers.Layer):
@@ -290,9 +291,8 @@ use_ensemble = True
 
 # load train data
 print('Loading train data')
-categories = os.listdir("./dev_data")#+os.listdir("./eval_data")
 categories_dev = os.listdir("./dev_data")
-#categories_eval = os.listdir("./eval_data")
+categories_eval = os.listdir("./eval_data")
 
 if os.path.isfile(str(target_sr) + '_train_raw.npy'):
     train_raw = np.load(str(target_sr) + '_train_raw.npy')
@@ -306,11 +306,18 @@ else:
     train_files = []
     train_atts = []
     train_domains = []
-    dicts = ['./dev_data/']#, './eval_data/']
+    dicts = ['./dev_data/', './eval_data/']
     eps = 1e-12
     for dict in dicts:
         for label, category in enumerate(os.listdir(dict)):
             print(category)
+            if category=='RoboticArm':  # fix erroneous filenames
+                for count, file in tqdm(enumerate(os.listdir(dict + category + "/train")),
+                                    total=len(os.listdir(dict + category + "/train"))):
+                    if len(file.split('_'))<9:
+                        file_path = dict + category + "/train/" + file
+                        new_file_path = dict + category + "/train/" + file.split('weight')[0] + 'weight_' + file.split('weight')[1].split('_')[0] + '_Bckg_' + file.split('Bckg')[1] 
+                        os.rename(file_path, new_file_path)
             for count, file in tqdm(enumerate(os.listdir(dict + category + "/train")),
                                     total=len(os.listdir(dict + category + "/train"))):
                 if file.endswith('.wav'):
