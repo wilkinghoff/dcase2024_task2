@@ -55,10 +55,53 @@ class SqueezeAndExcitationBlock(tf.keras.layers.Layer):
 
 
 def adjust_size(wav, new_size):
-    #reps = int(np.ceil(new_size/wav.shape[0]))
-    #offset = np.random.randint(low=0, high=int(reps*wav.shape[0]-new_size+1))
-    #return np.tile(wav, reps=reps)[offset:offset+new_size]
-    return librosa.util.pad_center(wav, new_size)
+    reps = int(np.ceil(new_size/wav.shape[0]))
+    offset = np.random.randint(low=0, high=int(reps*wav.shape[0]-new_size+1))
+    #new_wav = np.tile(wav, reps=reps)[offset:offset+new_size]
+    new_wav = librosa.util.pad_center(wav, new_size)
+    return new_wav
+    
+    
+def temporal_mean(spec, keepdims=False):
+    # take average over time but do not consider zeros resulting from padding waveform
+    norm = tf.where(spec>0, tf.ones_like(spec), tf.zeros_like(spec))
+    norm = tf.reduce_sum(norm, axis=2, keepdims=True)+1e-16
+    return tf.reduce_sum(spec/norm, axis=1, keepdims=keepdims)
+
+
+class GetWelch(tf.keras.layers.Layer):
+    def __init__(self, nperseg=4096, noverlap=2048):
+        super(GetWelch, self).__init__()
+        self.nperseg = nperseg
+        self.noverlap = noverlap
+
+    def build(self, input_shape):
+        super(GetWelch, self).build(input_shape)
+
+    def call(self, waveform):
+        # Compute the spectrogram
+        stfts = tf.signal.stft(waveform, frame_length=self.nperseg, frame_step=self.nperseg - self.noverlap, fft_length=self.nperseg)
+        spectrograms = tf.abs(stfts)
+
+        # Power spectrogram
+        Sxx = tf.square(spectrograms)
+
+        # Average over time
+        Sxx = temporal_mean(Sxx)
+
+        # Logarithmic scaling
+        EPS = 1e-16
+        Sxx = tf.math.log(Sxx + EPS)
+
+        return Sxx#tf.squeeze(Sxx, axis=0)
+
+    def get_config(self):
+        config = {
+            'nperseg': self.nperseg,
+            'noverlap': self.noverlap
+        }
+        config.update(super(GetWelch, self).get_config())
+        return config
 
 
 class MagnitudeSpectrogram(tf.keras.layers.Layer):
@@ -99,7 +142,11 @@ class MagnitudeSpectrogram(tf.keras.layers.Layer):
         return config
 
 def mixupLoss(y_true, y_pred):
-    return tf.keras.losses.categorical_crossentropy(y_true=y_pred[:, :, 1], y_pred=y_pred[:, :, 0])
+    target = y_pred[:, :, 1]  # mixed-up labels
+    output = y_pred[:, :, 0]  # mixed-up predictions
+    #return tf.keras.losses.binary_crossentropy(target, output)
+    #return -tf.reduce_sum(target * tf.math.log(output), axis=-1)#/(tf.reduce_sum(target, axis=-1)+K.epsilon())  # categorical crossentropy without normalization (as it is done in keras)
+    return tf.keras.losses.categorical_crossentropy(target, output)
 
 
 def length_norm(mat):
@@ -122,6 +169,9 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
 
     # FFT
     x = tf.keras.layers.Lambda(lambda x: tf.math.abs(tf.signal.fft(tf.complex(x[:, :, 0], tf.zeros_like(x[:, :, 0])))[:, :int(raw_dim / 2)]))(x_mix)
+    
+    #x = tf.keras.layers.Reshape((raw_dim,))(x_mix)
+    #x = GetWelch()(x)
     x = tf.keras.layers.Reshape((-1,1))(x)
     x = tf.keras.layers.Conv1D(128, 256, strides=64, activation='linear', padding='same',
                                kernel_regularizer=l2_weight_decay, use_bias=use_bias)(x)
@@ -157,7 +207,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     x = tf.keras.layers.Reshape((raw_dim,))(x_mix)
     x = MagnitudeSpectrogram(16000, 1024, 512, f_max=8000, f_min=200)(x)
 
-    x = tf.keras.layers.Lambda(lambda x: x-tf.math.reduce_mean(x, axis=1, keepdims=True))(x) # CMN-like normalization
+    x = tf.keras.layers.Lambda(lambda x: x-temporal_mean(x, keepdims=True))(x) # CMN-like normalization, test with and without...
     x = tf.keras.layers.BatchNormalization(axis=-2)(x)
 
     # first block
@@ -273,7 +323,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
     x = tf.keras.layers.Concatenate(axis=-1)([emb_fft, emb_mel])
     x_ssl = tf.keras.layers.Concatenate(axis=-1)([emb_fft_ssl, emb_mel_ssl])
 
-    output_ssl = AdaProj(n_classes=num_classes*3, n_subclusters=n_subclusters, trainable=False)([x_ssl, y_ssl, label_input])
+    output_ssl = AdaProj(n_classes=num_classes*3, n_subclusters=n_subclusters, trainable=False)([x_ssl, y_ssl, label_input])  # compare with trainable equals True
     output = AdaProj(n_classes=num_classes, n_subclusters=n_subclusters, trainable=False)([x, y_mix, label_input])
 
     loss_output = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=-1))([output, y_mix])
@@ -419,6 +469,12 @@ else:
     np.save('test_files.npy', test_files)
     np.save(str(target_sr) + '_test_raw.npy', test_raw)
 """
+# replace ToyCircuit with ToyCar because they are both ToyCars
+#for k in np.arange(train_atts.shape[0]):
+#    if train_ids[k] == 'ToyCircuit_00':
+#        train_atts[k] = 'car' + train_atts[k].split('id')[-1]  # this made it much worse!
+train_ids[train_ids == 'ToyCircuit_00'] = 'ToyCar_00'
+
 # encode ids as labels
 le_4train = LabelEncoder()
 
@@ -504,7 +560,7 @@ for k_ensemble in np.arange(ensemble_size):
         print('ensemble iteration: ' + str(k_ensemble+1))
         print('aeon: ' + str(k+1))
         # fit model
-        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_ssl_baseline_with_adaproj_no_squeeze_sample_weights-normalized-inverse_no_statex.h5'
+        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_welch.h5'
         if not os.path.isfile(weight_path):
             model.fit(
                 [train_raw[source_train], y_train_cat_4train[source_train]],
