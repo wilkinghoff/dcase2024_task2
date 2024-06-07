@@ -303,7 +303,7 @@ else:
     train_files = []
     train_atts = []
     train_domains = []
-    dicts = ['./dev_data/', './eval_data/']
+    dicts = ['./eval_data/']#['./dev_data/', './eval_data/']
     eps = 1e-12
     for dict in dicts:
         for label, category in enumerate(os.listdir(dict)):
@@ -429,11 +429,12 @@ num_classes_4train = len(np.unique(np.concatenate([train_ids_4train, eval_ids_4t
 train_labels_4train = le_4train.transform(train_ids_4train)
 eval_labels_4train = le_4train.transform(eval_ids_4train)
 
-le = LabelEncoder()
-train_labels = le.fit_transform(train_ids)
+le = LabelEncoder().fit(np.concatenate([train_ids, eval_ids, test_ids], axis=0))
+train_labels = le.transform(train_ids)
 eval_labels = le.transform(eval_ids)
 test_labels = le.transform(test_ids)
-num_classes = len(np.unique(train_labels))
+all_labels = np.unique(np.concatenate([train_labels, eval_labels, test_labels], axis=0))
+num_classes = len(all_labels)
 
 # define sample weights
 sample_weights = np.ones(train_ids_4train.shape)
@@ -477,10 +478,10 @@ ensemble_size = 10
 final_results_dev = np.zeros((ensemble_size, 6))
 final_results_eval = np.zeros((ensemble_size, 6))
 
-pred_eval = np.zeros((eval_raw.shape[0], np.unique(train_labels).shape[0], 2))
-pred_unknown = np.zeros((unknown_raw.shape[0], np.unique(train_labels).shape[0], 2))
-pred_test = np.zeros((test_raw.shape[0], np.unique(train_labels).shape[0], 2))
-pred_train = np.zeros((train_labels.shape[0], np.unique(train_labels).shape[0], 2))
+pred_eval = np.zeros((eval_raw.shape[0], num_classes, 2))
+pred_unknown = np.zeros((unknown_raw.shape[0], num_classes, 2))
+pred_test = np.zeros((test_raw.shape[0], num_classes, 2))
+pred_train = np.zeros((train_labels.shape[0], num_classes, 2))
 
 for k_ensemble in np.arange(ensemble_size):
     # prepare scores and domain info
@@ -502,7 +503,7 @@ for k_ensemble in np.arange(ensemble_size):
         print('ensemble iteration: ' + str(k_ensemble+1))
         print('aeon: ' + str(k+1))
         # fit model
-        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_final.h5'
+        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_final_only-eval.h5'
         if not os.path.isfile(weight_path):
             model.fit(
                 [train_raw[source_train], y_train_cat_4train[source_train]],
@@ -511,7 +512,8 @@ for k_ensemble in np.arange(ensemble_size):
                 batch_size=batch_size, epochs=epochs,
                 validation_data=(
                 [eval_raw, y_eval_cat_4train], [y_eval_cat_4train, y_eval_cat_4train]),
-                sample_weight=sample_weights[source_train])
+                sample_weight=sample_weights[source_train]
+                )
             model.save(weight_path)
             model.save(weight_path)
         else:
@@ -533,37 +535,38 @@ for k_ensemble in np.arange(ensemble_size):
         x_test_ln = length_norm(test_embs)
         x_unknown_ln = length_norm(unknown_embs)
 
-        for j, lab in tqdm(enumerate(np.unique(train_labels))):
-            cat = le.inverse_transform([lab])[0]
-            kmeans = KMeans(n_clusters=n_subclusters, random_state=0).fit(x_train_ln[source_train*(train_labels == lab)])
-            means_source_ln = kmeans.cluster_centers_
-            means_target_ln = x_train_ln[~source_train * (train_labels == lab)]
+        for j, lab in tqdm(enumerate(all_labels)):
+            if np.sum(train_labels == lab)>0:
+                cat = le.inverse_transform([lab])[0]
+                kmeans = KMeans(n_clusters=n_subclusters, random_state=0).fit(x_train_ln[source_train*(train_labels == lab)])
+                means_source_ln = kmeans.cluster_centers_
+                means_target_ln = x_train_ln[~source_train * (train_labels == lab)]
 
-            # compute cosine distances
-            if use_ensemble:
-                pred_train[train_labels == lab, j, 0] += np.min(2*(1-np.dot(x_train_ln[train_labels == lab], means_target_ln.transpose())), axis=-1)
-                pred_train[train_labels == lab, j, 1] += np.min(2*(1-np.dot(x_train_ln[train_labels == lab], means_source_ln.transpose())), axis=-1)
-            else:
-                pred_train[train_labels == lab, j, 0] = np.min(2*(1-np.dot(x_train_ln[train_labels == lab], means_target_ln.transpose())), axis=-1)
-                pred_train[train_labels == lab, j, 1] = np.min(2*(1-np.dot(x_train_ln[train_labels == lab], means_source_ln.transpose())), axis=-1)
-            if np.sum(eval_labels == lab) > 0:
+                # compute cosine distances
                 if use_ensemble:
-                    pred_eval[eval_labels == lab, j,0] += np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose())),axis=-1)
-                    pred_eval[eval_labels == lab, j,1] += np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose())), axis=-1)
-                    pred_unknown[unknown_labels == lab, j,0] += np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose())), axis=-1)
-                    pred_unknown[unknown_labels == lab, j,1] += np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose())), axis=-1)
+                    pred_train[train_labels == lab, j, 0] += np.min(2*(1-np.dot(x_train_ln[train_labels == lab], means_target_ln.transpose())), axis=-1)
+                    pred_train[train_labels == lab, j, 1] += np.min(2*(1-np.dot(x_train_ln[train_labels == lab], means_source_ln.transpose())), axis=-1)
                 else:
-                    pred_eval[eval_labels == lab, j,0] = np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose())),axis=-1)
-                    pred_eval[eval_labels == lab, j,1] = np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose())), axis=-1)
-                    pred_unknown[unknown_labels == lab, j,0] = np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose())), axis=-1)
-                    pred_unknown[unknown_labels == lab, j,1] = np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose())), axis=-1)
-            if np.sum(test_labels == lab) > 0:
-                if use_ensemble:
-                    pred_test[test_labels == lab, j, 0] += np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_target_ln.transpose())), axis=-1)
-                    pred_test[test_labels == lab, j, 1] += np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_source_ln.transpose())), axis=-1)
-                else:
-                    pred_test[test_labels == lab, j, 0] = np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_target_ln.transpose())), axis=-1)
-                    pred_test[test_labels == lab, j, 1] = np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_source_ln.transpose())), axis=-1)
+                    pred_train[train_labels == lab, j, 0] = np.min(2*(1-np.dot(x_train_ln[train_labels == lab], means_target_ln.transpose())), axis=-1)
+                    pred_train[train_labels == lab, j, 1] = np.min(2*(1-np.dot(x_train_ln[train_labels == lab], means_source_ln.transpose())), axis=-1)
+                if np.sum(eval_labels == lab) > 0:
+                    if use_ensemble:
+                        pred_eval[eval_labels == lab, j,0] += np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose())),axis=-1)
+                        pred_eval[eval_labels == lab, j,1] += np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose())), axis=-1)
+                        pred_unknown[unknown_labels == lab, j,0] += np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose())), axis=-1)
+                        pred_unknown[unknown_labels == lab, j,1] += np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose())), axis=-1)
+                    else:
+                        pred_eval[eval_labels == lab, j,0] = np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_target_ln.transpose())),axis=-1)
+                        pred_eval[eval_labels == lab, j,1] = np.min(2*(1-np.dot(x_eval_ln[eval_labels == lab], means_source_ln.transpose())), axis=-1)
+                        pred_unknown[unknown_labels == lab, j,0] = np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_target_ln.transpose())), axis=-1)
+                        pred_unknown[unknown_labels == lab, j,1] = np.min(2*(1-np.dot(x_unknown_ln[unknown_labels == lab], means_source_ln.transpose())), axis=-1)
+                if np.sum(test_labels == lab) > 0:
+                    if use_ensemble:
+                        pred_test[test_labels == lab, j, 0] += np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_target_ln.transpose())), axis=-1)
+                        pred_test[test_labels == lab, j, 1] += np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_source_ln.transpose())), axis=-1)
+                    else:
+                        pred_test[test_labels == lab, j, 0] = np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_target_ln.transpose())), axis=-1)
+                        pred_test[test_labels == lab, j, 1] = np.min(2*(1-np.dot(x_test_ln[test_labels == lab], means_source_ln.transpose())), axis=-1)
 
         print('#######################################################################################################')
         print('DEVELOPMENT SET')
