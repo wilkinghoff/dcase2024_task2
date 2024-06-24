@@ -127,7 +127,7 @@ def model_emb_cnn(num_classes, raw_dim, n_subclusters, use_bias=False):
 
     # FFT
     #x = tf.keras.layers.Lambda(lambda x: tf.math.abs(tf.signal.fft(tf.complex(x[:, :, 0], tf.zeros_like(x[:, :, 0])))[:, :int(raw_dim / 2)]))(x_mix)
-    x = tf.keras.layers.Lambda(lambda x: tf.math.abs(tf.signal.fft(tf.complex(x[:, :, 0], tf.zeros_like(x[:, :, 0])))[:, :8000]))(x_mix)
+    x = tf.keras.layers.Lambda(lambda x: tf.math.abs(tf.signal.fft(tf.complex(x[:, :, 0], tf.zeros_like(x[:, :, 0])))[:, :8000]))(x_mix)  # should one use a zero filter here too?
     
     #x = tf.keras.layers.Reshape((raw_dim,))(x_mix)
     #x = GetWelch()(x)
@@ -303,7 +303,7 @@ else:
     train_files = []
     train_atts = []
     train_domains = []
-    dicts = ['./eval_data/']#['./dev_data/', './eval_data/']
+    dicts = ['./dev_data/']#['./dev_data/', './eval_data/']
     eps = 1e-12
     for dict in dicts:
         for label, category in enumerate(os.listdir(dict)):
@@ -503,7 +503,7 @@ for k_ensemble in np.arange(ensemble_size):
         print('ensemble iteration: ' + str(k_ensemble+1))
         print('aeon: ' + str(k+1))
         # fit model
-        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_final_only-eval.h5'
+        weight_path = 'wts_' + str(k+1) + 'k_' + str(target_sr) + '_' + str(k_ensemble+1) + '_final_only-dev.h5'
         if not os.path.isfile(weight_path):
             model.fit(
                 [train_raw[source_train], y_train_cat_4train[source_train]],
